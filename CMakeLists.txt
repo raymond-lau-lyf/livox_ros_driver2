@@ -1,17 +1,57 @@
-# judge which cmake codes to use 
+# judge which cmake codes to use
+# Auto-detect ROS version if ROS_EDITION is not specified
+if(NOT DEFINED ROS_EDITION)
+  if(DEFINED ENV{ROS_VERSION})
+    if($ENV{ROS_VERSION} STREQUAL "1")
+      set(ROS_EDITION "ROS1")
+    elseif($ENV{ROS_VERSION} STREQUAL "2")
+      set(ROS_EDITION "ROS2")
+    endif()
+  elseif(DEFINED CATKIN_DEVEL_PREFIX)
+    # If CATKIN_DEVEL_PREFIX is defined, we're building with catkin (ROS1)
+    set(ROS_EDITION "ROS1")
+  else()
+    # Default to ROS1 for backward compatibility with catkin build
+    set(ROS_EDITION "ROS1")
+  endif()
+endif()
+
+message(STATUS "Building for ${ROS_EDITION}")
+
 if(ROS_EDITION STREQUAL "ROS1")
 
   # Copyright(c) 2019 livoxtech limited.
 
   cmake_minimum_required(VERSION 3.0)
 
+  # Compatibility policies for newer CMake (4.x)
+  # CMP0148: Keep FindPythonInterp/FindPythonLibs for ROS compatibility
+  if(POLICY CMP0148)
+    cmake_policy(SET CMP0148 OLD)
+  endif()
+  # CMP0167: Keep FindBoost module
+  if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+  endif()
 
   #---------------------------------------------------------------------------------------
   # Start livox_ros_driver2 project
   #---------------------------------------------------------------------------------------
   include(cmake/version.cmake)
-  project(livox_ros_driver2 VERSION ${LIVOX_ROS_DRIVER2_VERSION} LANGUAGES CXX)
+  project(livox_ros_driver2 VERSION ${LIVOX_ROS_DRIVER2_VERSION} LANGUAGES CXX C)
   message(STATUS "livox_ros_driver2 version: ${LIVOX_ROS_DRIVER2_VERSION}")
+
+  # Fix for VTK 9.1 MPI issue on Ubuntu 22.04 with newer CMake
+  # VTK's cmake config requires MPI::MPI_C target before PCL is loaded
+  find_package(MPI COMPONENTS C CXX QUIET)
+  if(NOT TARGET MPI::MPI_C AND MPI_C_FOUND)
+    # Create MPI::MPI_C target if not created by FindMPI
+    add_library(MPI::MPI_C IMPORTED INTERFACE)
+    set_target_properties(MPI::MPI_C PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${MPI_C_INCLUDE_DIRS}"
+      INTERFACE_LINK_LIBRARIES "${MPI_C_LIBRARIES}"
+    )
+  endif()
 
   #---------------------------------------------------------------------------------------
   # Add ROS Version MACRO
